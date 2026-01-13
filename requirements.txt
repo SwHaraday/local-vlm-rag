@@ -1,0 +1,30 @@
+# these 4 lines below are original by HIRESO
+#--extra-index-url https://download.pytorch.org/whl/cu121
+#torch==2.5.1
+#torchvision==0.20.1
+#torchaudio==2.5.1
+
+#you would better install torch **1st** by following command.
+#pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+#then use this txt for rest.
+
+transformers==4.57.1
+flash_attn @ file:///C:/hogehoge/vlm/flash_attn-2.7.0.post2%252Bcu124torch2.5.1cxx11abiFALSE-cp311-cp311-win_amd64.whl
+accelerate
+byaldi
+pdf2image
+qwen-vl-utils
+ipywidgets
+jinja2
+wheel
+einops
+seaborn
+git+https://github.com/illuin-tech/colpali.git@main
+pillow
+tqdm
+qdrant-client
+datasets
+huggingface_hub
+matplotlib
+pdfplumber
+gradio==5.47.2
