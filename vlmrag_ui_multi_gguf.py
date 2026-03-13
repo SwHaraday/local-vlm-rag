@@ -1,15 +1,8 @@
 '''
-GPUSOROBANによるウェビナーでのデモをローカル環境で動くようにしたプログラム
-Qdrantはローカルサーバーとして常駐させているという前提でvectorstoreを保存している
-あらかじめ作成されているvectorstoreを参照してクライアントPCからの質問をGradio経由で回答する。202511 yh
-単一のデータベースを参照するだけでは遊んでいる時間が長くなるので、ユーザー側でデータベースを切り替えられる機能を追加した。
-これで、管理する側は新しいデータベース作成や新しいPDF資料追加の時だけ対応すればよく、動かしっぱなしにできる。コスパもやや向上？　202601 yh
-更に
 参照元："https://github.com/JamePeng/llama-cpp-python?tab=readme-ov-file"
 2026年2月現在 Officialのllamacpp-pythonがQWEN3-VLのGUFFに対応しきれていないため
 JamePeng氏によるfork先からllama-cpp-pthon　version0.3.23をインストールした。
 Officialとはインターフェイスが異なるが十分に試用することができる　20260213 YH
-
 '''
 import os, glob, sys, pickle, codecs
 import time
@@ -33,15 +26,13 @@ from llama_cpp import Llama
 from llama_cpp.llama_chat_format import Qwen3VLChatHandler
 import base64
 
-os.environ["NO_PROXY"] = "localhost, 127.0.0.1/8, ::1" # proxy環境で自分自身にアクセスするための呪文
-
 # ★★試用するモデル、サーバー、AIのロール設定は環境に合わせて適宜書き換えてください
 # ローカルディスクに保存済みのgguf生成AIモデルを指定
 MODEL_PATH = r"./Qwen3VL-8B-Instruct-Q8_0.gguf"
 #MODEL_PATH = r"./Qwen3VL-8B-Instruct-Q4_K_M.gguf"
 # 上のモデルに適合するmmprojのggufファイルを指定（画像を読み込ませるため）
 MMPROJ_PATH = r"./mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
-SRV_IP = '10.xxx.XXX.27' # Gradioでwebサービスする際のIP
+SRV_IP = '12.34.56.78' # Gradioでwebサービスする際のIP
 SRV_PT = 8080 # Gradioでwebサービスする際のport
 URL = '127.0.0.1:6333' # IP & port for Qdrant server
 pre_role = 'あなたはAIについての博士です。' # roleに特別な役割を与えたい場合に記述。不要なら’’としておく。
@@ -72,7 +63,7 @@ llm = Llama(
       image_min_tokens=1024, # Note: Qwen-VL models require at minimum 1024 image tokens to function correctly on bbox grounding tasks
     ),
     n_gpu_layers=-1,
-    n_ctx=20480,
+    n_ctx=20480, #1000,
     swa_full=True,
     verbose=False, #True,
 )
@@ -82,7 +73,8 @@ llm = Llama(
 import atexit
 @atexit.register
 def free_model():
-    llm._sampler.close()
+    if llm._sampler:
+        llm._sampler.close()
     llm.close()
 
 print(f"VLM loaded in {time.perf_counter() - t0:.2f}s")
@@ -554,7 +546,7 @@ class MMrag():
 
         # 検索結果から画像を抽出
         imgs = []
-        #この部分でstring型の画像フルパスを生成
+        #★★この部分をstringベースの画像フルパス生成に書き換えればよい。
         for res in search_results:
             gpn = res["global_page_num"]
             nam = os.path.splitext(res["pdf_name"])[0]
@@ -621,15 +613,16 @@ class AdvancedQASystem:
             ],
         }
 
-def chat(message, history, radio):
+def chat(message, history, radio, KN):
     rag.switch_document(radio) # ここで毎回radioを読んでDBを切り替えたい
     res = qa.answer_question(message, top_k=KN)
     out = res["answer"] + f"\n【参照ソース】"
     for i, src in enumerate(res["sources"]):
+        #out = out + f"\n画像{i}　-> {src['pdf_name']} ページ{src['page_num']} (スコア:{src['score']:.3f})" # ファイルへのリンク無し
         p_nam = src['pdf_name'] # 'と"を使い切るのでやむを得ず一旦取り込み
         p_pag = src['page_num'] # 'と"を使い切るのでやむを得ず一旦取り込み
         #print(f'http://{SRV_IP}:{SRV_PT}/gradio_api/file={path}/{p_nam}') #debugprint
-        out = out + f"\n画像{i}　-> <a href='http://{SRV_IP}:{SRV_PT}/gradio_api/file={DOCUMENT＿ROOT}/{rag.vector_store.collection_name}/{p_nam}#page={p_pag}' target='_blank'>{src['pdf_name']} ページ{src['page_num']}</a> (スコア:{src['score']:.3f})" # ファイルへのリンク有
+        out = out + f"\n画像{i+1}　-> <a href='http://{SRV_IP}:{SRV_PT}/gradio_api/file={DOCUMENT＿ROOT}/{rag.vector_store.collection_name}/{p_nam}#page={p_pag}' target='_blank'>{src['pdf_name']} ページ{src['page_num']}</a> (スコア:{src['score']:.3f})" # ファイルへのリンク有
     yield out
 
 if __name__ == "__main__":
@@ -649,11 +642,12 @@ if __name__ == "__main__":
         rag.vector_store.all_collections, label="使用するベクトルDB",
         value=rag.vector_store.collection_name,
         )
+        KN = gr.Slider(1, 9, value=KN, step=1, label="最大検索文書数")
         gr.ChatInterface(fn=chat,
                      title='AI博士',
                      concurrency_limit=4, # 同時に4人まで接続できるように…　と追加　20250228yh
                      type='messages',
-                     additional_inputs=[radio], # ここで毎回radio選択されたDBを渡す
+                     additional_inputs=[radio, KN], # ここで毎回radio選択されたDBを渡す
                      #theme=gr.themes.Soft(),
                     )
     demo.queue().launch(server_name=SRV_IP, server_port=SRV_PT, allowed_paths=paths) # share=True にするとほかのPCからもアクセス可能
