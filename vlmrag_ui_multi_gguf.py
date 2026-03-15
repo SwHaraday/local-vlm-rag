@@ -171,7 +171,7 @@ def image_to_base64_data_uri(
 参照元：https://zenn.dev/kun432/scraps/b2cb6e607969c0
 kun432氏のZennへの投稿記事
 Qwen/Qwen3-VL-4B-Instruct を適用した際に回答に多くの繰り返しを含む挙動を抑制するためのクラス関数。
-「外観監視AI博士」でも同じ症状が出るので読み解いて適用してみることにする。20251113Y.H
+ここでも同じ症状が出るので読み解いて適用してみることにする。20251113Y.H
 '''
 class PresencePenaltyProcessor(LogitsProcessor):
     """
